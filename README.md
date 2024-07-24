@@ -3,7 +3,7 @@
 
 # Crossover extraction using PyReX
 
-- Along track data with three columns (lon, lat, z) in ASCII format (`.txt`, `.dat`) should be placed in `input` folder.
+- Along track data (individual track files) with three columns (lon, lat, z) in ASCII format (`.txt`, `.dat`) should be placed in `input` folder. Two sample datasets (group_a and group_b) containing the along track (ship borne) free-air gravity from NGDC is already present in the input folder.
 - The output of PyReX will be saved in the folder `output_detection_files`. Make a folder if it doesn't exist.
 - Config script `config_cross.py` along with `detection.py`, `correction.py`, `stacking.py` and a module file `cross_over_module.py` are placed in `codes` folder.
 
@@ -42,3 +42,9 @@ $ python correction.py corrections_calc_id
 ```
 for corrections.
 
+
+## Required python packages
+- numpy
+- numba
+- scipy
+- pandas
