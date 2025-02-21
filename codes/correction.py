@@ -5,61 +5,95 @@ from numba import set_num_threads, jit
 import sys
 import os
 sys.path.insert(0, os.getcwd())
-from scipy.optimize import curve_fit
-from cross_over_module import (distance_on_track,
+from scipy.optimize import curve_fit  # noqa
+from cross_over_module import (distance_on_track,  # noqa
                                fit_func_factory,
                                haversine,
                                lon_shift,
                                )
-from config_cross import setup, calc
+from config_cross import setup, calc  # noqa
 # for disabling multi"threading" in numpy, in polyfit, since we are doing
 # multiprocessing anyway. Should be set before importing numpy
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
-import numpy as np
+import numpy as np  # noqa
 
 
 calc_id = sys.argv[1]
-
-number_of_processes = setup().number_of_processes
-number_of_numba_threads = setup().number_of_numba_threads
-data_columnn_numbers = setup().data_columnn_numbers
-curve_fit_maxfev = setup().curve_fit_maxfev
-
-detection_save_filename = calc(calc_id).detection_save_filename
-post_correction_crossover_filename = (
-                              calc(calc_id).post_correction_crossover_filename)
-corrected_folder = calc(calc_id).corrected_folder
-correcton_save_filename = calc(calc_id).correcton_save_filename
-
-filename_match_pattern_self = calc(calc_id).filename_match_pattern_self
-filename_match_pattern_other = calc(calc_id).filename_match_pattern_other
-correction_weight = calc(calc_id).correction_weight
-
-fundamental_distance = calc(calc_id).fundamental_distance
-fit_order = calc(calc_id).fit_order
-fit_margin = calc(calc_id).fit_margin
+calc_obj = calc(calc_id)
 
 
-# distnace_limit_to_crossover = calc(calc_id).distnace_limit_to_crossover
+detection_input_filename = calc_obj.detection_input_filename
+post_correction_detection_filename = (
+                              calc_obj.post_correction_detection_filename)
+corrected_folder = calc_obj.corrected_folder
+correcton_save_filename = calc_obj.correcton_save_filename
+
+filename_match_pattern_self = calc_obj.filename_match_pattern_self
+filename_match_pattern_other = calc_obj.filename_match_pattern_other
+correction_weight = calc_obj.correction_weight
+
+fundamental_distance = calc_obj.fundamental_distance
+fit_order = calc_obj.fit_order
+
+fit_margin = (calc_obj.fit_margin
+              if hasattr(calc_obj, "fit_margin")
+              else 0)
+
+
+# distnace_limit_to_crossover = calc_obj.distnace_limit_to_crossover
 # min_crossovers_in_distance_limit_eachside = (
-#         calc(calc_id).min_crossovers_in_distance_limit_eachside)
+#         calc_obj.min_crossovers_in_distance_limit_eachside)
 
-if hasattr(calc(calc_id), "xdiff_max"):
-    xdiff_max = calc(calc_id).xdiff_max
+if hasattr(calc_obj, "xdiff_max"):
+    xdiff_max = calc_obj.xdiff_max
 else:
     xdiff_max = np.inf
 
-if hasattr(calc(calc_id), "xdiff_min"):
-    xdiff_min = calc(calc_id).xdiff_min
+if hasattr(calc_obj, "xdiff_min"):
+    xdiff_min = calc_obj.xdiff_min
 else:
     xdiff_min = -np.inf
 
-if hasattr(calc(calc_id), "interpolation_threshold"):
-    interpolation_threshold = calc(calc_id).interpolation_threshold
+if hasattr(calc_obj, "interpolation_threshold"):
+    interpolation_threshold = calc_obj.interpolation_threshold
 else:
     interpolation_threshold = np.inf
 
+if hasattr(calc_obj, "data_columnn_numbers"):
+    data_columnn_numbers = calc_obj.data_columnn_numbers
+elif hasattr(setup(), "data_columnn_numbers"):
+    data_columnn_numbers = setup().data_columnn_numbers
+else:
+    data_columnn_numbers = [0, 1, 2]
+print(f"data_columnn_numbers: {data_columnn_numbers}")
+
+if hasattr(calc_obj, "input_data_delimiter"):
+    input_data_delimiter = calc_obj.input_data_delimiter
+elif hasattr(setup(), "input_data_delimiter"):
+    input_data_delimiter = setup().input_data_delimiter
+else:
+    input_data_delimiter = r'\s+'
+print(f'input_data_delimiter: {input_data_delimiter}')
+
+curve_fit_maxfev = (calc_obj.curve_fit_maxfev
+                    if hasattr(calc_obj, "curve_fit_maxfev")
+                    else None)  # TODO find the correct default value
+
+if hasattr(calc_obj, "number_of_processes"):
+    number_of_processes = calc_obj.number_of_processes
+elif hasattr(setup(), "number_of_processes"):
+    number_of_processes = setup().number_of_processes
+else:
+    number_of_processes = 1
+print(f"number_of_processes: {number_of_processes}")
+
+if hasattr(calc_obj, "number_of_numba_threads"):
+    number_of_numba_threads = calc_obj.number_of_numba_threads
+elif hasattr(setup(), "number_of_numba_threads"):
+    number_of_numba_threads = setup().number_of_numba_threads
+else:
+    number_of_numba_threads = 1
 
 set_num_threads(number_of_numba_threads)
 
@@ -67,22 +101,16 @@ set_num_threads(number_of_numba_threads)
 fit_order = int(sys.argv[2]) if len(sys.argv) > 2 else fit_order
 
 
-# # overwriting name
-# correcton_save_filename = (correcton_save_filename.split(".")[0] +
-#                            f"_{fit_order}." +
-#                            correcton_save_filename.split(".")[1])
+def file_read(name):
+    print(f"reading {name}")
+    data_i = np.asarray(
+            pd.read_csv(name, header=None, sep=input_data_delimiter,
+                        dtype=float))[:, data_columnn_numbers]
+    data_i = np.c_[lon_shift(data_i[:, 0]), data_i[:, 1], data_i[:, 2]]
+    return data_i
 
 
-# # overwriting name
-# corrected_folder = corrected_folder.split("/")[0] + f"_{fit_order}/"
-
-# # overwriting name
-# post_correction_crossover_filename = (
-#         post_correction_crossover_filename.split(".")[-2] +
-#         f"_{fit_order}." +
-#         post_correction_crossover_filename.split(".")[1])
-
-detection_df = pd.read_csv(detection_save_filename, sep="\t")
+detection_df = pd.read_csv(detection_input_filename, sep="\t")
 
 detection_df = detection_df.astype({"Track1":       "str",
                                     "Track2":       "str",
@@ -180,9 +208,7 @@ def main_func(fullfile_name):
                   f"with {initial_parameters.size} parameters " +
                   f"on {d_self.size} Xs")
 
-        data = np.asarray(pd.read_csv(
-                     fullfile_name, header=None, sep=r"\s+", dtype=float)
-                     )[:, data_columnn_numbers]
+        data = file_read(fullfile_name)
 
         lon = data[:, 0]
         lat = data[:, 1]
@@ -418,15 +444,6 @@ nr_tracks_fn_a = np.array([full_name.split("/")[-1]
                           for full_name in nr_tracks_ffn_a])
 
 
-# # This cache is awsome for reading same file multiple times
-# @lru_cache
-def file_read(name):
-    print(f"reading {name}")
-    data_i = np.asarray(
-            pd.read_csv(name, header=None, sep=r"\s+", dtype=float)
-            )[:, data_columnn_numbers]
-    data_i = np.c_[lon_shift(data_i[:, 0]), data_i[:, 1], data_i[:, 2]]
-    return data_i
 
 
 # # Normal reading
@@ -573,6 +590,8 @@ new_z2_a = z2_a
 new_z1_a[change_idx] = columnised_result[:, 0]
 new_z2_a[change_idx] = columnised_result[:, 1]
 
+# TODO: Don't create a new post_correction_df. copy the detection_df and 
+# update the columns
 post_correction_df = pd.DataFrame({"Track1":     track1_ffn_a,
                                    "Track2":     track2_ffn_a,
                                    "x_int":      lon_int_a,
@@ -595,7 +614,7 @@ post_correction_df = post_correction_df.astype({"Track1":       "str",
                                                 "z2":         "float",
                                                 "d2":         "float"})
 
-post_correction_df.to_csv(post_correction_crossover_filename,
+post_correction_df.to_csv(post_correction_detection_filename,
                           sep="\t", na_rep="NaN")
 
 

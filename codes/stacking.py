@@ -11,33 +11,64 @@ import glob
 from config_cross import setup, calc
 
 calc_id = sys.argv[1]
+calc_obj = calc(calc_id)
 
-number_of_processes = setup().number_of_processes
-number_of_numba_threads = setup().number_of_numba_threads
+number_of_tracks = calc_obj.number_of_tracks
+cutoff = calc_obj.cutoff
+stacking_file_read_glob_f_string_list = (
+                         calc_obj.stacking_file_read_glob_f_string_list)
+stacking_save_filepaths_f_string = (
+                             calc_obj.stacking_save_filepaths_f_string)
 
-max_iter = (calc(calc_id).max_iter
-            if hasattr(calc(calc_id), "max_iter")
+if hasattr(calc_obj, "number_of_processes"):
+    number_of_processes = calc_obj.number_of_processes
+elif hasattr(setup(), "number_of_processes"):
+    number_of_processes = setup().number_of_processes
+else:
+    number_of_processes = 1
+print(f"number_of_processes: {number_of_processes}")
+
+
+if hasattr(calc_obj, "number_of_numba_threads"):
+    number_of_numba_threads = calc_obj.number_of_numba_threads
+elif hasattr(setup(), "number_of_numba_threads"):
+    number_of_numba_threads = setup().number_of_numba_threads
+else:
+    number_of_numba_threads = 1
+print(f"number_of_numba_threads: {number_of_numba_threads}")
+
+max_iter = (calc_obj.max_iter
+            if hasattr(calc_obj, "max_iter")
             else 20)
 
-data_skip_value = (calc(calc_id).data_skip_value
-                   if hasattr(calc(calc_id), "data_skip_value")
+data_skip_value = (calc_obj.data_skip_value
+                   if hasattr(calc_obj, "data_skip_value")
                    else 1)
 
 longest_track_name_match_pattern = (
-        calc(calc_id).longest_track_name_match_pattern
-        if hasattr(calc(calc_id), "longest_track_name_match_pattern")
+        calc_obj.longest_track_name_match_pattern
+        if hasattr(calc_obj, "longest_track_name_match_pattern")
         else '')
 tracks_for_averaging_name_match_pattern = (
-        calc(calc_id).tracks_for_averaging_name_match_pattern
-        if hasattr(calc(calc_id), "tracks_for_averaging_name_match_pattern")
+        calc_obj.tracks_for_averaging_name_match_pattern
+        if hasattr(calc_obj, "tracks_for_averaging_name_match_pattern")
         else '')
 
-number_of_tracks = calc(calc_id).number_of_tracks
-cutoff = calc(calc_id).cutoff
-stacking_file_read_glob_f_string_list = (
-                         calc(calc_id).stacking_file_read_glob_f_string_list)
-stacking_save_filepaths_f_string = (
-                             calc(calc_id).stacking_save_filepaths_f_string)
+if hasattr(calc_obj, "data_columnn_numbers"):
+    data_columnn_numbers = calc_obj.data_columnn_numbers
+elif hasattr(setup(), "data_columnn_numbers"):
+    data_columnn_numbers = setup().data_columnn_numbers
+else:
+    data_columnn_numbers = [0, 1, 2]
+print(f"data_columnn_numbers: {data_columnn_numbers}")
+
+if hasattr(calc_obj, "input_data_delimiter"):
+    input_data_delimiter = calc_obj.input_data_delimiter
+elif hasattr(setup(), "input_data_delimiter"):
+    input_data_delimiter = setup().input_data_delimiter
+else:
+    input_data_delimiter = r'\s+'
+print(f'input_data_delimiter: {input_data_delimiter}')
 
 
 def file_reading(i_track):
@@ -55,7 +86,8 @@ def file_reading(i_track):
     for filename in file_list:
         try:
             tmp_np2d_array = np.atleast_2d(
-                    pd.read_csv(filename, header=None, sep=r"\s+"))
+                    pd.read_csv(filename, header=None,
+                                sep=input_data_delimiter))[:, data_columnn_numbers]  # noqa
             data_list.append(tmp_np2d_array)
             size = (~np.isnan(tmp_np2d_array[:, 0])).sum()
             size_list.append(size)

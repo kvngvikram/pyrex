@@ -55,6 +55,13 @@ else:
     data_columnn_numbers = [0, 1, 2]
 print(f"data_columnn_numbers: {data_columnn_numbers}")
 
+if hasattr(calc_obj, "input_data_delimiter"):
+    input_data_delimiter = calc_obj.input_data_delimiter
+elif hasattr(setup(), "input_data_delimiter"):
+    input_data_delimiter = setup().input_data_delimiter
+else:
+    input_data_delimiter = r'\s+'
+print(f'input_data_delimiter: {input_data_delimiter}')
 
 detection_chunksize = (calc_obj.detection_chunksize
                        if hasattr(calc_obj, "detection_chunksize")
@@ -125,21 +132,21 @@ track_file_names = []
 for glob_element in data_glob_string_list:
     track_file_names += sorted(glob.glob(glob_element))  # append list to list
 
-track_file_names = np.asarray(track_file_names)
-
-n_tracks = track_file_names.size  # number of tracks
-print(f"Number of tracks in total: {n_tracks}, starting to read")
+track_file_names = np.asarray(track_file_names)  # TODO:I forgot why i did this
 
 
 def file_read(name):
     print(f"\rreading {name}                            ", end='')
     data_i = np.asarray(
-            pd.read_csv(name, header=None, sep=r"\s+", dtype=float)
-            )[:, data_columnn_numbers]
+            pd.read_csv(name, header=None, sep=input_data_delimiter,
+                        dtype=float))[:, data_columnn_numbers]
     data_i[:, 0] = lon_shift(data_i[:, 0])
     data_i = np.c_[data_i[:, 0], data_i[:, 1], data_i[:, 2]]
 
-    return data_i
+    if data_i.shape[0] > 1:
+        return data_i
+    else:
+        return None
 
 
 if pre_read_data_files:
@@ -148,6 +155,12 @@ if pre_read_data_files:
     with Pool(processes=number_of_processes) as P:
         data = P.map(file_read, track_file_names)
 
+    # Check if some data is empty and delete the filename
+    for i in reversed(range(len(data))):  # reversed here is a trick
+        if data[i] is None:
+            data.pop(i)
+            track_file_names = np.delete(track_file_names, i)
+
     print("\rclosing data reading pool                                       ")
 else:
     print('Track data files will be read as and when required.')
@@ -155,6 +168,9 @@ else:
     data = None
     precalculate_break_indices = False
     precalculate_track_distances = False
+
+n_tracks = track_file_names.size  # number of tracks
+print(f"Number of tracks in total: {n_tracks}, starting to read")
 
 
 if precalculate_break_indices:
@@ -341,8 +357,8 @@ def single_calc(ij,
     interpolation_type = detection_interpolation_type
     internal_flag = i == j
 
-    print(f'\r{i, j}   \t -> doing : {names[i]}          {names[j]}                            ',  # noqa
-          end='')
+    # print(f'\r{i, j}  -> doing : {names[i]}   {names[j]}   ',  # noqa
+    #       end='')
 
     (n_int, x_int, y_int,
      ls1_idx, z1_int, d1,
@@ -364,8 +380,11 @@ def single_calc(ij,
     a_track1_idx = np.zeros(n_int, dtype=int) + int(i)
     a_track2_idx = np.zeros(n_int, dtype=int) + int(j)
 
-    print(f'\r{i, j}   \t -> done  : {names[i]}          {names[j]}                            ',  # noqa
-          end='')
+    # print(f'\r{i, j}  -> done  : {names[i]}   {names[j]}   ',  # noqa
+    #       end='')
+
+    if n_int > 0:
+        print(f'\r{i, j}', end='')
     # for n in range(n_int):
     #     print(f'\r{i}\t{j}                   ', end='')
 
@@ -409,13 +428,19 @@ print('detected crossover between : ')
 result_generator = P.imap(wrapper_single_calc, range(n_tracks),
                           chunksize=detection_chunksize)
 
-result = (i for i in result_generator if i is not None)
+result_tuple = (i for i in result_generator if i is not None)
 # using () instead of [] is more memory efficient ?
 # see designcise.com/web/tutorial/how-to-remove-all-none-values-from-a-python-list#using-generator-expression   # noqa
-result = np.concatenate(list(result))
 
 P.close()
 P.join()
+
+result_list = list(result_tuple)
+if len(result_list) == 0:
+    print('No crossovers found !!!!')
+    sys.exit()
+
+result = np.concatenate(result_list)
 
 print("\rcalculations complete!                                            ")
 print("Saving data now")

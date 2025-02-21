@@ -33,7 +33,7 @@ from config_cross import setup
 
 # TODO: numba_diff_bug: np.diff() when doing for a 1d float array will give error
 # if the array is a non-contiguous array. This has someting to do with how
-# array is stored internally in RAM.
+# array is stored internally in RAM. Signature: array(float64, 1d, C)
 # A workaround is to use np.diff() on the copy of the array instead
 # In the current code some of such scenearios were avoided by using lon_shift()
 # or redifining the same array like x = x[flag_array] or even x = x+0
