@@ -4,16 +4,6 @@ from numba import prange
 from config_cross import setup
 
 
-# # uncomment this to disable numba jit
-# def jit(*args, **kwargs):
-#     def inner(func):
-#         def wrapper(*wargs, **wkwargs):
-#             # print('inside wrapper')
-#             return func(*wargs, **wkwargs)
-#         return wrapper
-#     return inner
-
-
 # Search for Edge_case to find the occurances in this file
 
 # TODO: IMPORTANT: What happens when there are NaNs in lon lat during detection
@@ -22,14 +12,6 @@ from config_cross import setup
 # because in the detection file the indices should match to rows in track files
 # But there should be a condition. Clean your data beforehand. lon lats should
 # not have NaNs !!
-
-# TODO: there are two versions of get_break_indices. The new one will have
-# python interpreter induced optimisations and has a for loop !!!
-# So the new one may be used only when numba is enabled. But for finding the
-# timing properties old one will be better because no unknown optimisations.
-# Whereas the algorithem of new one can have improvement in overall speed of
-# detection script during edge cases (only during edge cases).
-# So using old one for now.
 
 # TODO: numba_diff_bug: np.diff() when doing for a 1d float array will give error
 # if the array is a non-contiguous array. This has someting to do with how
@@ -47,6 +29,12 @@ from config_cross import setup
 semi_major_axis = setup().semi_major_axis
 flattening_coefficient = setup().flattening_coefficient
 
+enable_numba_flag = (setup().enable_numba_flag
+                     if hasattr(setup, 'enable_numba_flag') else True)
+
+numba_parallel_flag = (setup().numba_parallel_flag
+                       if hasattr(setup, 'numba_parallel_flag') else False)
+
 
 lon_shift_condition_value = (setup().lon_shift_condition_value
                              if hasattr(setup, "lon_shift_condition_value")
@@ -57,8 +45,19 @@ recurse_level_limit = (setup().recurse_level_limit
                        else 50)
 
 
+if enable_numba_flag is False:
+    def jit(*args, **kwargs):  # overwrite jit with a dummy decorator
+        def inner(func):
+            def wrapper(*wargs, **wkwargs):
+                # print('inside wrapper')
+                return func(*wargs, **wkwargs)
+            return wrapper
+        return inner
+    print('numba disabled with setup section in config_cross.py')
+
+
 # doing this because numba doesn't support arguments for max and min functions
-@jit(nopython=True, parallel=True, cache=True)
+@jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 def min_ax1(xa, xb):
     x_min = np.zeros(xa.size)
     for i in prange(xa.size):
@@ -66,7 +65,7 @@ def min_ax1(xa, xb):
     return x_min
 
 
-@jit(nopython=True, parallel=True, cache=True)
+@jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 def max_ax1(xa, xb):
     x_max = np.zeros(xa.size)
     for i in prange(xa.size):
@@ -74,7 +73,7 @@ def max_ax1(xa, xb):
     return x_max
 
 
-@jit(nopython=True, parallel=True, cache=True)
+@jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 def sort_ax1_4(x1a, x1b, x2a, x2b):
     x_sort = np.zeros(x1a.size*4).reshape(x1a.size, 4)
     array2d = np.column_stack((x1a, x1b, x2a, x2b))
@@ -83,7 +82,7 @@ def sort_ax1_4(x1a, x1b, x2a, x2b):
     return x_sort
 
 
-@jit(nopython=True, parallel=True, cache=True)
+@jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 def mean_ax1(x):
     x_mean = np.zeros(x.shape[0])
     for i in prange(x_mean.size):
@@ -92,7 +91,7 @@ def mean_ax1(x):
 
 
 # TODO: using this until numba has an official np.isin() support
-@jit(nopython=True, parallel=True, cache=True)
+@jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 def my_isin_1d(a, b):
     out_f = np.zeros(a.size) > 1  # dtype aurguments doesn't work
     for i in prange(out_f.size):
@@ -106,12 +105,12 @@ def lon_shift(lon):
     return lon - 360*(lon > 180)
 
 
-@jit(nopython=True, cache=True, parallel=True)
+@jit(nopython=True, cache=True, parallel=numba_parallel_flag)
 def np_cosd(angle_degrees):
     return np.cos(angle_degrees * np.pi/180)
 
 
-@jit(nopython=True, cache=True, parallel=True)
+@jit(nopython=True, cache=True, parallel=numba_parallel_flag)
 def np_sind(angle_degrees):
     return np.sin(angle_degrees * np.pi/180)
 
@@ -139,7 +138,7 @@ def get_pseudo_segment_flags(x, y):
 
 
 # @jit(nopython=True)
-# @jit(nopython=True, parallel=True, cache=True)
+# @jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 @jit(nopython=True, cache=True)
 def haversine(lon1_deg, lat1_deg, lon2_deg, lat2_deg):
     """
@@ -167,7 +166,7 @@ def haversine(lon1_deg, lat1_deg, lon2_deg, lat2_deg):
     return local_planet_radius_in_m * c
 
 
-# @jit(nopython=True, parallel=True, cache=True)
+# @jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 @jit(nopython=True, cache=True)
 def planet_radius_simple_ellipsoid(lat_deg):
     a = semi_major_axis
@@ -180,7 +179,14 @@ def planet_radius_simple_ellipsoid(lat_deg):
     return r
 
 
-@jit(nopython=True, parallel=True, cache=True)
+# TODO: there are two versions of get_break_indices. The new one will have
+# python interpreter induced optimisations and has a for loop !!!
+# So the new one may be used only when numba is enabled. But for finding the
+# timing properties old one will be better because no unknown optimisations.
+# Whereas the algorithem of new one can have improvement in overall speed of
+# detection script during edge cases (only during edge cases).
+# So using new one by default and this is just kept here for reference.
+@jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 def old_get_break_indices(x, y):  # given like this for convenience with P.map
     # n = x.size
 
@@ -284,7 +290,7 @@ def get_break_indices(x, y):
 
 
 # this is for small distances using haversine function
-@jit(nopython=True, parallel=True, cache=True)
+@jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 def distance_on_track(lon, lat):
     """
     Distance along the track based on haversine formula
@@ -853,7 +859,7 @@ def get_recursive_box_indices(x1, y1, x2, y2,
 # with using angle_accuracy_threshold_deg which is basically an extra margin
 # in latitude/longitude degree terms within which an intersectin point can lie.
 # 2e-6 corresponts to ~0.55 meters at equator
-@jit(nopython=True, cache=True, parallel=True)
+@jit(nopython=True, cache=True, parallel=numba_parallel_flag)
 def intersection_of_arcs_on_sphere(lon1a, lat1a, lon1b, lat1b,
                                    lon2a, lat2a, lon2b, lat2b,
                                    # angle_accuracy_threshold_rad=1e-7,
@@ -1055,7 +1061,7 @@ def intersection_of_arcs_on_sphere(lon1a, lat1a, lon1b, lat1b,
     return lon_shift(lon_int), lat_int, valid_int_flag
 
 
-@jit(nopython=True, cache=True, parallel=True)
+@jit(nopython=True, cache=True, parallel=numba_parallel_flag)
 def simple_line_intersection_lonlat(x1a, y1a, x1b, y1b, x2a, y2a, x2b, y2b):
     # # Handling longitude value shifts at -180 and +180
     # checking longitudes shifts from 180 to -180 or vice versa
@@ -1206,7 +1212,7 @@ def simple_line_intersection_lonlat(x1a, y1a, x1b, y1b, x2a, y2a, x2b, y2b):
 # TODO: use this function to write more types of interpolations
 # maybe polynomial or cubic spline
 # Don't enable parallel unnecessarily
-# @jit(nopython=True, cache=True, parallel=True)
+# @jit(nopython=True, cache=True, parallel=numba_parallel_flag)
 @jit(nopython=True, cache=True)
 def interpolate(x_int, y_int, ls_idx, x, y, z):
     """
@@ -1305,10 +1311,10 @@ def cross_detect_with_internal(x1, y1, x2, y2,
 
 # This is just combining cross_detect() and distance_on_track()
 # @jit(nopython=True)
-# @jit(nopython=True, parallel=True, cache=True)
+# @jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 # Removing cache here because cross_detect did not have it (because of
 # get_recursive_box_indices)
-@jit(nopython=True, parallel=True)
+@jit(nopython=True, parallel=numba_parallel_flag)
 def cross_distances(lon1, lat1, z1, lon2, lat2, z2,
                     bi_1=None, bi_2=None,
                     d_1=None, d_2=None,
@@ -1505,7 +1511,7 @@ def grid(lon, lat, ssh,
     return lon_grid, lat_grid, ssh_grid, no_data_grid, std_grid
 
 
-@jit(nopython=True, parallel=True, cache=True)
+@jit(nopython=True, parallel=numba_parallel_flag, cache=True)
 def get_hist_bins(x):
     """
     Refer: statisticshowto.com/choose-bin-sizes-statistics

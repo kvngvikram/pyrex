@@ -15,6 +15,8 @@ import numpy as np
 # Things to be familier with: f-string, glob, classes (priliminary) ..
 
 # make folders like ./detection_files and ./correction_info beforehand
+# Optional settings need not be used in your own sections unless you want to
+# use some non-default setting
 
 
 class setup:  # class independent of calc_id. Common options for all.
@@ -32,6 +34,11 @@ class setup:  # class independent of calc_id. Common options for all.
         self.number_of_processes = 1
         self.data_columnn_numbers = [0, 1, 2]  # for Longitude, latitude, Z
         self.input_data_delimiter = r'\s+'  # any number of whitespaces
+
+        self.enable_numba_flag = True  # Enable numba whenever used in pyrex
+        self.numba_parallel_flag = False
+        # Disable any multithreading parallelisation by numba since we have top
+        # level multiprocessing. Also to avoid any errors.
 
 
 class calc:
